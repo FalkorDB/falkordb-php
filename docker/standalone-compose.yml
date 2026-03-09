@@ -1,0 +1,6 @@
+services:
+  falkordb-standalone:
+    image: falkordb/falkordb:edge
+    container_name: falkordb-standalone
+    ports:
+      - "6379:6379"

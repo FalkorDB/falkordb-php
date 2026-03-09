@@ -1,0 +1,140 @@
+name: CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  release:
+    types: [created]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        php-version: ["8.3", "8.4"]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run docker-compose for FalkorDB standalone instance
+        uses: hoverkraft-tech/compose-action@v2.4.3
+        with:
+          compose-file: ./docker/standalone-compose.yml
+
+      - name: Test if FalkorDB standalone instance is running
+        run: |
+          docker ps -a
+          docker logs falkordb-standalone
+          docker exec falkordb-standalone redis-cli ping || { echo "FalkorDB standalone instance is not running"; exit 1; }
+
+      - name: Run docker-compose for FalkorDB sentinel instance
+        uses: hoverkraft-tech/compose-action@v2.4.3
+        with:
+          compose-file: ./docker/sentinel-compose.yml
+
+      - name: Test if FalkorDB sentinel instance is running
+        run: |
+          docker ps -a
+          docker logs falkordb-sentinel
+          docker exec falkordb-sentinel redis-cli -p 26379 ping || { echo "FalkorDB sentinel instance is not running"; exit 1; }
+          docker logs falkordb-master
+          docker exec falkordb-master redis-cli -p 6380 ping || { echo "FalkorDB master instance is not running"; exit 1; }
+          docker logs falkordb-replica
+          docker exec falkordb-replica redis-cli -p 6381 ping || { echo "FalkorDB replica instance is not running"; exit 1; }
+
+      - name: Run docker-compose for FalkorDB cluster instance
+        uses: hoverkraft-tech/compose-action@v2.4.3
+        with:
+          compose-file: ./docker/cluster-compose.yml
+
+      - name: Test if FalkorDB cluster instance is running
+        run: |
+          docker ps -a
+          for i in {0..2}; do
+            port=$((17000 + $i))
+            docker logs falkordb-node$i
+            docker exec falkordb-node$i redis-cli -p $port ping || { echo "FalkorDB cluster node$i is not running"; exit 1; }
+          done
+
+      - name: Add entries to the host file to correctly resolve service names
+        run: |
+          sudo echo "127.0.0.1 falkordb-standalone" | sudo tee -a /etc/hosts
+          sudo echo "127.0.0.1 falkordb-master" | sudo tee -a /etc/hosts
+          sudo echo "127.0.0.1 falkordb-replica" | sudo tee -a /etc/hosts
+          sudo echo "127.0.0.1 falkordb-sentinel" | sudo tee -a /etc/hosts
+          for i in node{0..2}; do
+            echo "127.0.0.1 $i" | sudo tee -a /etc/hosts
+          done
+
+      - name: install docker-compose client
+        run: sudo apt update && sudo apt install docker-compose -y
+
+      - name: Setup PHP ${{ matrix.php-version }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          extensions: redis
+          tools: composer:v2
+          coverage: xdebug
+
+      - name: Validate composer
+        run: composer validate --strict
+
+      - run: composer install --prefer-dist --no-interaction --no-progress
+      - run: composer lint:php
+      - run: composer test:unit
+
+      - name: Show running Docker containers
+        run: docker ps -a
+
+      - name: Wait for cluster to be fully ready
+        run: |
+          echo "Waiting for cluster formation to complete..."
+          for i in {1..30}; do
+            if docker exec falkordb-node0 redis-cli -p 17000 cluster info | grep -q "cluster_state:ok"; then
+              echo "Cluster state is OK after $i attempts"
+              break
+            fi
+            echo "Attempt $i: Cluster not ready yet, waiting 2 seconds..."
+            sleep 2
+            if [ $i -eq 30 ]; then
+              echo "Cluster failed to become ready after 60 seconds"
+              docker logs falkordb-cluster-creator
+              exit 1
+            fi
+          done
+          docker exec falkordb-node0 redis-cli -p 17000 --cluster check node0:17000 || { echo "Cluster check failed"; exit 1; }
+          echo "Cluster is fully ready and operational!"
+
+      - name: Run integration tests
+        run: |
+          FALKORDB_HOST=127.0.0.1 FALKORDB_PORT=6379 composer test:integration
+          FALKORDB_CLUSTER_SEEDS=127.0.0.1:17000,127.0.0.1:17001,127.0.0.1:17002 composer test:integration:cluster
+          FALKORDB_SENTINEL_HOST=127.0.0.1 FALKORDB_SENTINEL_PORT=26379 FALKORDB_SENTINEL_MASTER_NAME=mymaster FALKORDB_SENTINEL_REDIS_HOST=127.0.0.1 FALKORDB_SENTINEL_REDIS_PORT=6380 composer test:integration:sentinel
+
+      - name: Generate coverage report
+        run: XDEBUG_MODE=coverage vendor/bin/phpunit -c phpunit.xml.dist --testsuite unit --coverage-clover coverage.xml
+
+      - name: Notify Google Chat
+        id: test-action
+        if: failure() # only send notification in case of failure
+        uses: SimonScholz/google-chat-action@v1.1.0
+        with:
+          webhookUrl: "${{ secrets.GOOGLE_CHAT_WEBHOOK_URL }}"
+          jobStatus: ${{ job.status }}
+          threadKey: ${{ github.event.number }}
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

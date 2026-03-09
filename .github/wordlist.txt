@@ -1,0 +1,17 @@
+falkordb
+FalkorDB
+php
+phpredis
+Cypher
+cypher
+Redis
+redis
+composer
+json
+yaml
+GitHub
+github
+config
+CHANGELOG
+README
+md

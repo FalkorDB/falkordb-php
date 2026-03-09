@@ -1,0 +1,63 @@
+services:
+  falkordb-master:
+    image: falkordb/falkordb:edge
+    container_name: falkordb-master
+    hostname: falkordb-master
+    ports:
+      - "6380:6380"
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        cat <<EOF >/data/node.conf
+        port 6380
+        loadmodule /var/lib/falkordb/bin/falkordb.so
+        EOF
+        redis-server /data/node.conf
+    networks: [falkordb-sentinel]
+
+  falkordb-replica:
+    image: falkordb/falkordb:edge
+    container_name: falkordb-replica
+    hostname: falkordb-replica
+    ports:
+      - "6381:6381"
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        cat <<EOF >/data/node.conf
+        port 6381
+        loadmodule /var/lib/falkordb/bin/falkordb.so
+        replicaof falkordb-master 6380
+        EOF
+        redis-server /data/node.conf
+    networks: [falkordb-sentinel]
+
+  sentinel:
+    image: falkordb/falkordb:edge
+    container_name: falkordb-sentinel
+    hostname: falkordb-sentinel
+    ports:
+      - "26379:26379"
+    depends_on:
+      - falkordb-master
+      - falkordb-replica
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        cat <<EOF >/data/sentinel.conf
+        port 26379
+        sentinel resolve-hostnames yes
+        sentinel announce-hostnames yes
+        sentinel monitor mymaster falkordb-master 6380 1
+        sentinel down-after-milliseconds mymaster 5000
+        sentinel failover-timeout mymaster 10000
+        sentinel parallel-syncs mymaster 1
+        EOF
+        redis-server /data/sentinel.conf --sentinel
+    networks: [falkordb-sentinel]
+
+networks:
+  falkordb-sentinel:

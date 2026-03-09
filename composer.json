@@ -1,0 +1,35 @@
+{
+  "name": "falkordb/falkordb-php",
+  "description": "A FalkorDB client for PHP built on top of phpredis",
+  "type": "library",
+  "license": "MIT",
+  "keywords": ["falkordb", "redis", "graph", "phpredis"],
+  "require": {
+    "php": "^8.2"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^11.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "FalkorDB\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "FalkorDB\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "lint:php": "find src tests -type f -name \"*.php\" -print0 | xargs -0 -n 1 php -l",
+    "test": "phpunit -c phpunit.xml.dist",
+    "test:unit": "phpunit -c phpunit.xml.dist --testsuite unit",
+    "test:integration": "FALKORDB_RUN_INTEGRATION=1 phpunit -c phpunit.xml.dist --testsuite integration",
+    "test:integration:cluster": "FALKORDB_RUN_INTEGRATION=1 FALKORDB_RUN_CLUSTER_INTEGRATION=1 phpunit -c phpunit.xml.dist --testsuite integration",
+    "test:integration:sentinel": "FALKORDB_RUN_INTEGRATION=1 FALKORDB_RUN_SENTINEL_INTEGRATION=1 phpunit -c phpunit.xml.dist --testsuite integration",
+    "qa": [
+      "@lint:php",
+      "@test:unit"
+    ]
+  }
+}
