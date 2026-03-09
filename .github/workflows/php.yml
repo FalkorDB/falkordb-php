@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
 
     strategy:
+      fail-fast: false
       matrix:
         php-version: ["8.3", "8.4"]
 
@@ -127,7 +128,7 @@ jobs:
 
       - name: Notify Google Chat
         id: test-action
-        if: failure() # only send notification in case of failure
+        if: ${{ failure() && secrets.GOOGLE_CHAT_WEBHOOK_URL != '' }} # only send notification in case of failure and webhook exists
         uses: SimonScholz/google-chat-action@v1.1.0
         with:
           webhookUrl: "${{ secrets.GOOGLE_CHAT_WEBHOOK_URL }}"
