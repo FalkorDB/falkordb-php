@@ -1,0 +1,35 @@
+name: Publish to Packagist
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Packagist update
+        env:
+          PACKAGIST_USERNAME: ${{ secrets.PACKAGIST_USERNAME }}
+          PACKAGIST_TOKEN: ${{ secrets.PACKAGIST_TOKEN }}
+          PACKAGE_REPOSITORY_URL: https://github.com/${{ github.repository }}
+        run: |
+          if [ -z "${PACKAGIST_USERNAME}" ] || [ -z "${PACKAGIST_TOKEN}" ]; then
+            echo "PACKAGIST_USERNAME and PACKAGIST_TOKEN secrets must be configured."
+            exit 1
+          fi
+
+          payload=$(printf '{"repository":{"url":"%s"}}' "${PACKAGE_REPOSITORY_URL}")
+
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "User-Agent: FalkorDB-falkordb-php-packagist-updater" \
+            "https://packagist.org/api/update-package?username=${PACKAGIST_USERNAME}&apiToken=${PACKAGIST_TOKEN}" \
+            -d "${payload}"
+
+          echo "Packagist update was triggered successfully."
