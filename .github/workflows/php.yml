@@ -25,10 +25,10 @@ jobs:
         php-version: ["8.3", "8.4"]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Run docker-compose for FalkorDB standalone instance
-        uses: hoverkraft-tech/compose-action@v2.5.0
+        uses: hoverkraft-tech/compose-action@4894d2492015c1774ee5a13a95b1072093087ec3 # v2.5.0
         with:
           compose-file: ./docker/standalone-compose.yml
 
@@ -39,7 +39,7 @@ jobs:
           docker exec falkordb-standalone redis-cli ping || { echo "FalkorDB standalone instance is not running"; exit 1; }
 
       - name: Run docker-compose for FalkorDB sentinel instance
-        uses: hoverkraft-tech/compose-action@v2.5.0
+        uses: hoverkraft-tech/compose-action@4894d2492015c1774ee5a13a95b1072093087ec3 # v2.5.0
         with:
           compose-file: ./docker/sentinel-compose.yml
 
@@ -54,7 +54,7 @@ jobs:
           docker exec falkordb-replica redis-cli -p 6381 ping || { echo "FalkorDB replica instance is not running"; exit 1; }
 
       - name: Run docker-compose for FalkorDB cluster instance
-        uses: hoverkraft-tech/compose-action@v2.5.0
+        uses: hoverkraft-tech/compose-action@4894d2492015c1774ee5a13a95b1072093087ec3 # v2.5.0
         with:
           compose-file: ./docker/cluster-compose.yml
 
@@ -81,7 +81,7 @@ jobs:
         run: sudo apt update && sudo apt install docker-compose -y
 
       - name: Setup PHP ${{ matrix.php-version }}
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2
         with:
           php-version: ${{ matrix.php-version }}
           extensions: redis
@@ -131,13 +131,13 @@ jobs:
         if: ${{ failure() && env.GOOGLE_CHAT_WEBHOOK_URL != '' }} # only send notification in case of failure and webhook exists
         env:
           GOOGLE_CHAT_WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK_URL }}
-        uses: SimonScholz/google-chat-action@v1.1.0
+        uses: SimonScholz/google-chat-action@3b3519e5102dba8aa5046fd711c4b553586409bb # v1.1.0
         with:
           webhookUrl: "${{ env.GOOGLE_CHAT_WEBHOOK_URL }}"
           jobStatus: ${{ job.status }}
           threadKey: ${{ github.event.number }}
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@1af58845a975a7985b0beb0cbe6fbbb71a41dbad # v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
