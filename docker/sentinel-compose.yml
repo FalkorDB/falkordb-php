@@ -5,7 +5,7 @@ services:
     hostname: falkordb-master
     ports:
       - "6380:6380"
-    entrypoint: /bin/bash
+    entrypoint: /bin/sh
     command:
       - -c
       - |
@@ -22,7 +22,7 @@ services:
     hostname: falkordb-replica
     ports:
       - "6381:6381"
-    entrypoint: /bin/bash
+    entrypoint: /bin/sh
     command:
       - -c
       - |
@@ -43,7 +43,7 @@ services:
     depends_on:
       - falkordb-master
       - falkordb-replica
-    entrypoint: /bin/bash
+    entrypoint: /bin/sh
     command:
       - -c
       - |

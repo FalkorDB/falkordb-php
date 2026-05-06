@@ -5,7 +5,7 @@ services:
     hostname: node0
     ports:
       - "17000:17000"
-    entrypoint: /bin/bash
+    entrypoint: /bin/sh
     command:
       - -c
       - |
@@ -29,7 +29,7 @@ services:
     hostname: node1
     ports:
       - "17001:17001"
-    entrypoint: /bin/bash
+    entrypoint: /bin/sh
     command:
       - -c
       - |
@@ -53,7 +53,7 @@ services:
     hostname: node2
     ports:
       - "17002:17002"
-    entrypoint: /bin/bash
+    entrypoint: /bin/sh
     command:
       - -c
       - |
@@ -78,7 +78,7 @@ services:
       - node0
       - node1
       - node2
-    entrypoint: /bin/bash
+    entrypoint: /bin/sh
     command:
       - -c
       - |
