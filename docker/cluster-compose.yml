@@ -16,8 +16,7 @@ services:
         cluster-config-file /data/nodes.conf
         cluster-node-timeout 5000
         cluster-preferred-endpoint-type hostname
-        cluster-announce-hostname localhost
-        cluster-announce-ip node0
+        cluster-announce-hostname node0
         cluster-announce-port 17000
         EOF
         redis-server /data/node.conf
@@ -40,8 +39,7 @@ services:
         cluster-config-file /data/nodes.conf
         cluster-node-timeout 5000
         cluster-preferred-endpoint-type hostname
-        cluster-announce-hostname localhost
-        cluster-announce-ip node1
+        cluster-announce-hostname node1
         cluster-announce-port 17001
         EOF
         redis-server /data/node.conf
@@ -64,8 +62,7 @@ services:
         cluster-config-file /data/nodes.conf
         cluster-node-timeout 5000
         cluster-preferred-endpoint-type hostname
-        cluster-announce-hostname localhost
-        cluster-announce-ip node2
+        cluster-announce-hostname node2
         cluster-announce-port 17002
         EOF
         redis-server /data/node.conf
