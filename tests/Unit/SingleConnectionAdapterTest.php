@@ -42,4 +42,21 @@ final class SingleConnectionAdapterTest extends TestCase
         $adapter = new SingleConnectionAdapter($redis);
         self::assertSame(['a', 'b'], $adapter->listGraphs());
     }
+
+    public function testListGraphsIgnoresNumericPlaceholderEntries(): void
+    {
+        $redis = new class {
+            public function rawCommand(string $command, mixed ...$args): array
+            {
+                if ($command !== 'GRAPH.LIST') {
+                    return [];
+                }
+
+                return [1];
+            }
+        };
+
+        $adapter = new SingleConnectionAdapter($redis);
+        self::assertSame([], $adapter->listGraphs());
+    }
 }

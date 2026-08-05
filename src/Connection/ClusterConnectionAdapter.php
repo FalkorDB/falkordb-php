@@ -216,11 +216,10 @@ final class ClusterConnectionAdapter implements ConnectionAdapter
      */
     private function addGraphName(mixed $candidate, array &$graphs): void
     {
-        if (!is_string($candidate) && !is_int($candidate)) {
+        if (!is_string($candidate)) {
             return;
         }
-
-        $graphName = trim((string) $candidate);
+        $graphName = trim($candidate);
         if ($graphName === '') {
             return;
         }
