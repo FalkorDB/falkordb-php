@@ -60,6 +60,27 @@ final class ClusterConnectionAdapterTest extends TestCase
         self::assertSame(['a', 'b', 'c'], $adapter->listGraphs());
     }
 
+    public function testListGraphsParsesAssociativeSetStyleReplies(): void
+    {
+        $cluster = new FakeCluster(
+            masters: [['node1', 7000], ['node2', 7001]],
+            responder: static function (mixed $target, string $command): array {
+                if ($command !== 'GRAPH.LIST') {
+                    return [];
+                }
+
+                if ($target === ['node1', 7000]) {
+                    return ['{a}' => true, '{b}' => true];
+                }
+
+                return ['{b}' => true, '{c}' => true];
+            }
+        );
+        $adapter = new ClusterConnectionAdapter($cluster);
+
+        self::assertSame(['{a}', '{b}', '{c}'], $adapter->listGraphs());
+    }
+
     public function testListGraphsFallsBackToSlotRoutedKeysWhenAddressRepliesAreEmpty(): void
     {
         $cluster = new FakeCluster(

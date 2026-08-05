@@ -193,10 +193,39 @@ final class ClusterConnectionAdapter implements ConnectionAdapter
         if (!is_array($reply)) {
             return;
         }
-
-        foreach ($reply as $graph) {
-            $graphs[(string) $graph] = true;
+        if (array_is_list($reply)) {
+            foreach ($reply as $graph) {
+                $this->addGraphName($graph, $graphs);
+            }
+            return;
         }
+
+        foreach ($reply as $graphName => $present) {
+            if (is_string($graphName) && $graphName !== '') {
+                $graphs[$graphName] = true;
+                continue;
+            }
+
+            $this->addGraphName($present, $graphs);
+        }
+    }
+
+    /**
+     * @param mixed $candidate
+     * @param array<string, bool> $graphs
+     */
+    private function addGraphName(mixed $candidate, array &$graphs): void
+    {
+        if (!is_string($candidate) && !is_int($candidate)) {
+            return;
+        }
+
+        $graphName = trim((string) $candidate);
+        if ($graphName === '') {
+            return;
+        }
+
+        $graphs[$graphName] = true;
     }
 
     /**
