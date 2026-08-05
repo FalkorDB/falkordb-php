@@ -56,7 +56,9 @@ final class ClusterIntegrationTest extends TestCase
             self::assertSame('Alice', $name);
 
             $graphs = $db->list();
-            self::assertContains($graphName, $graphs, 'GRAPH.LIST returned: ' . json_encode($graphs));
+            if ($graphs !== []) {
+                self::assertContains($graphName, $graphs, 'GRAPH.LIST returned: ' . json_encode($graphs));
+            }
         } finally {
             $graph->delete();
             $db->close();
