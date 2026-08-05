@@ -45,7 +45,41 @@ final class SingleConnectionAdapter implements ConnectionAdapter
             return [];
         }
 
-        return array_values(array_map('strval', $reply));
+        $graphs = [];
+        if (array_is_list($reply)) {
+            foreach ($reply as $graphName) {
+                if (!is_string($graphName)) {
+                    continue;
+                }
+
+                $normalized = trim($graphName);
+                if ($normalized === '') {
+                    continue;
+                }
+
+                $graphs[$normalized] = true;
+            }
+
+            return array_values(array_keys($graphs));
+        }
+        foreach ($reply as $graphName => $present) {
+            if (is_string($graphName) && $graphName !== '') {
+                $graphs[$graphName] = true;
+                continue;
+            }
+            if (!is_string($present)) {
+                continue;
+            }
+
+            $normalized = trim($present);
+            if ($normalized === '') {
+                continue;
+            }
+
+            $graphs[$normalized] = true;
+        }
+
+        return array_values(array_keys($graphs));
     }
 
     public function close(): void
