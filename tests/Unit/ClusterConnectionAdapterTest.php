@@ -60,6 +60,50 @@ final class ClusterConnectionAdapterTest extends TestCase
         self::assertSame(['a', 'b', 'c'], $adapter->listGraphs());
     }
 
+    public function testListGraphsFallsBackToSlotRoutedKeysWhenAddressRepliesAreEmpty(): void
+    {
+        $cluster = new FakeCluster(
+            masters: [['node0', 7000], ['node1', 7001], ['node2', 7002]],
+            responder: static function (mixed $target, string $command): mixed {
+                if ($command !== 'GRAPH.LIST') {
+                    return [];
+                }
+
+                if (is_array($target)) {
+                    return [];
+                }
+
+                if (is_string($target) && str_contains($target, 'falkordb_route_0_')) {
+                    return ['g0'];
+                }
+
+                if (is_string($target) && str_contains($target, 'falkordb_route_5461_')) {
+                    return ['g1'];
+                }
+
+                if (is_string($target) && str_contains($target, 'falkordb_route_10923_')) {
+                    return ['g2'];
+                }
+
+                return [];
+            },
+            clusterResponder: static function (mixed $target, string $command): array {
+                if ($command !== 'SLOTS') {
+                    return [];
+                }
+
+                return [
+                    [0, 5460, ['node0', 7000, 'id0']],
+                    [5461, 10922, ['node1', 7001, 'id1']],
+                    [10923, 16383, ['node2', 7002, 'id2']],
+                ];
+            }
+        );
+        $adapter = new ClusterConnectionAdapter($cluster);
+
+        self::assertSame(['g0', 'g1', 'g2'], $adapter->listGraphs());
+    }
+
     public function testListGraphsThrowsWhenAllMastersFail(): void
     {
         $cluster = new FakeCluster(
