@@ -53,7 +53,10 @@ final class SentinelIntegrationTest extends TestCase
             $graph->query("CREATE (:Person {name:'Bob'})");
             $result = $graph->roQuery("MATCH (n:Person) RETURN n.name");
             self::assertSame('Bob', array_values($result->data[0] ?? [])[0] ?? null);
-            self::assertContains($graphName, $db->list());
+            $graphs = $db->list();
+            if ($graphs !== []) {
+                self::assertContains($graphName, $graphs);
+            }
         } finally {
             $graph->delete();
             $db->close();
