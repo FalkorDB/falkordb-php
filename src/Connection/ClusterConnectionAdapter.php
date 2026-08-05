@@ -61,7 +61,7 @@ final class ClusterConnectionAdapter implements ConnectionAdapter
             }
         }
 
-        if ($graphs === [] && $primaryFailures === 0) {
+        if ($primaryFailures < count($masters)) {
             $this->collectGraphsUsingSlotRoutedKeys($masters, $graphs);
         }
 
@@ -213,7 +213,7 @@ final class ClusterConnectionAdapter implements ConnectionAdapter
         }
 
         try {
-            $slots = $this->cluster->cluster($this->pickNodeAddress(), 'SLOTS');
+            $slots = $this->cluster->cluster('__falkordb_cluster_slots__', 'SLOTS');
         } catch (Throwable) {
             return [];
         }
