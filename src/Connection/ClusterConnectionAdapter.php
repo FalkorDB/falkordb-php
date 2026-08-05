@@ -43,6 +43,10 @@ final class ClusterConnectionAdapter implements ConnectionAdapter
     public function listGraphs(): array
     {
         $masters = $this->masters();
+        echo "MASTERS COUNT: " . count($masters) . "\n";
+        foreach ($masters as $master_node) {
+            echo "MASTER: " . $master_node[0] . ":" . $master_node[1] . "\n";
+        }
         if ($masters === []) {
             return [];
         }
