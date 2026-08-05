@@ -60,7 +60,8 @@ final class ClusterConnectionAdapter implements ConnectionAdapter
                 foreach ($reply as $graph) {
                     $graphs[(string) $graph] = true;
                 }
-            } catch (Throwable) {
+            } catch (Throwable $exception) {
+                echo "FAIL on {$address[0]}:{$address[1]}: " . $exception->getMessage() . "\n";
                 $failures++;
             }
         }
