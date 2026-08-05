@@ -64,6 +64,7 @@ final class ClusterConnectionAdapter implements ConnectionAdapter
         if ($primaryFailures < count($masters)) {
             $this->collectGraphsUsingSlotRoutedKeys($masters, $graphs);
         }
+        $this->collectGraphsUsingDirectMasterConnections($masters, $graphs);
 
         if ($primaryFailures === count($masters) && $graphs === []) {
             throw new CommandException('Failed to collect GRAPH.LIST from all cluster masters');
@@ -145,6 +146,41 @@ final class ClusterConnectionAdapter implements ConnectionAdapter
                 $this->mergeGraphNames($reply, $graphs);
             } catch (Throwable) {
             }
+        }
+    }
+
+    /**
+     * @param array<int, array{0: string, 1: int}> $masters
+     * @param array<string, bool> $graphs
+     */
+    private function collectGraphsUsingDirectMasterConnections(array $masters, array &$graphs): void
+    {
+        if (!class_exists('Redis') || !class_exists('RedisCluster') || !$this->cluster instanceof \RedisCluster) {
+            return;
+        }
+
+        foreach ($masters as [$host, $port]) {
+            try {
+                $reply = $this->directMasterGraphList((string) $host, (int) $port);
+                $this->mergeGraphNames($reply, $graphs);
+            } catch (Throwable) {
+            }
+        }
+    }
+
+    private function directMasterGraphList(string $host, int $port): mixed
+    {
+        /** @var \Redis $redis */
+        $redis = new \Redis();
+        $connected = $redis->connect($host, $port, 0.5);
+        if (!$connected) {
+            throw new RuntimeException("Unable to connect to cluster master {$host}:{$port}");
+        }
+
+        try {
+            return $redis->rawCommand('GRAPH.LIST');
+        } finally {
+            $redis->close();
         }
     }
 
