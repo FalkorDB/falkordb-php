@@ -44,8 +44,30 @@ final class SentinelConnectionAdapter implements ConnectionAdapter
         if (!is_array($reply)) {
             return [];
         }
+        if (array_is_list($reply)) {
+            return array_values(array_map('strval', $reply));
+        }
 
-        return array_values(array_map('strval', $reply));
+        $graphs = [];
+        foreach ($reply as $graphName => $present) {
+            if (is_string($graphName) && $graphName !== '') {
+                $graphs[$graphName] = true;
+                continue;
+            }
+
+            if (!is_string($present) && !is_int($present)) {
+                continue;
+            }
+
+            $normalized = trim((string) $present);
+            if ($normalized === '') {
+                continue;
+            }
+
+            $graphs[$normalized] = true;
+        }
+
+        return array_values(array_keys($graphs));
     }
 
     public function close(): void
