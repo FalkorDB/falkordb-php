@@ -44,6 +44,11 @@ composer qa
 docker compose -f docker/standalone-compose.yml up -d
 composer test:integration
 ```
+The compose files use `falkordb/falkordb:latest` by default; set
+`FALKORDB_VERSION` to test against another tag, e.g.:
+```bash
+FALKORDB_VERSION=edge docker compose -f docker/standalone-compose.yml up -d
+```
 
 ## Contributing
 Contributions are welcome via issues and pull requests.
