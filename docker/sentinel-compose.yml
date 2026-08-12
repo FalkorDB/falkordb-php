@@ -1,6 +1,6 @@
 services:
   falkordb-master:
-    image: falkordb/falkordb:edge
+    image: falkordb/falkordb:${FALKORDB_VERSION:-latest}
     container_name: falkordb-master
     hostname: falkordb-master
     ports:
@@ -17,7 +17,7 @@ services:
     networks: [falkordb-sentinel]
 
   falkordb-replica:
-    image: falkordb/falkordb:edge
+    image: falkordb/falkordb:${FALKORDB_VERSION:-latest}
     container_name: falkordb-replica
     hostname: falkordb-replica
     ports:
@@ -35,7 +35,7 @@ services:
     networks: [falkordb-sentinel]
 
   sentinel:
-    image: falkordb/falkordb:edge
+    image: falkordb/falkordb:${FALKORDB_VERSION:-latest}
     container_name: falkordb-sentinel
     hostname: falkordb-sentinel
     ports:
