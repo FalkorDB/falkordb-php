@@ -33,6 +33,24 @@ var_dump($result->data);
 - Rich compact-reply parsing (nodes, edges, paths, maps, vectors, point, temporal values)
 - Cypher query parameter serialization
 - Graph and admin command coverage (`GRAPH.QUERY`, `GRAPH.RO_QUERY`, `GRAPH.INFO`, `GRAPH.LIST`, `GRAPH.CONSTRAINT`, `GRAPH.UDF`, etc.)
+- Enterprise graph offloading helpers (`GRAPH.OFFLOAD`, `GRAPH.LOAD`, `GRAPH.STUBS`, `GRAPH.STUBINFO`) when the [FalkorDB Enterprise module](https://github.com/FalkorDB/falkordb-enterprise-module) is loaded
+
+## Enterprise graph offloading
+These APIs require FalkorDB plus `falkordb_enterprise.so`. Without the enterprise module, the server returns an unknown-command error.
+
+```php
+$db = FalkorDB::connect(['host' => '127.0.0.1', 'port' => 6379]);
+$graph = $db->selectGraph('social');
+
+$graph->query("CREATE (:Person {name:'Alice'})");
+$graph->offload();                 // GRAPH.OFFLOAD social
+$db->stubs();                      // GRAPH.STUBS
+$graph->stubInfo();                // path/size/mtime/atime/ctime
+$graph->load();                    // GRAPH.LOAD social
+$graph->load(force: true);         // GRAPH.LOAD social FORCE
+```
+
+Equivalent top-level helpers: `$db->offload('social')`, `$db->load('social')`, `$db->stubInfo('social')`.
 
 ## Quality checks
 ```bash

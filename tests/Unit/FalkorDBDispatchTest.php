@@ -44,4 +44,59 @@ final class FalkorDBDispatchTest extends TestCase
         $db->disconnect();
         self::assertSame(1, $adapter->closeCalls);
     }
+
+    public function testNamedStubInfoParsesReply(): void
+    {
+        $adapter = new RecordingConnectionAdapter(
+            graphResponder: static fn (): array => [
+                'path', '/tmp/social.graph',
+                'size', 12,
+                'mtime', 100,
+                'atime', 101,
+                'ctime', 102,
+            ]
+        );
+        $db = FalkorDB::fromConnection($adapter);
+
+        self::assertSame(
+            [
+                'path' => '/tmp/social.graph',
+                'size' => 12,
+                'mtime' => 100,
+                'atime' => 101,
+                'ctime' => 102,
+            ],
+            $db->stubInfo('social')
+        );
+
+        self::assertSame('GRAPH.STUBINFO', $adapter->graphCalls[0]['command']);
+        self::assertSame('social', $adapter->graphCalls[0]['graph']);
+    }
+
+    public function testStubsAndNamedOffloadLoadCommands(): void
+    {
+        $adapter = new RecordingConnectionAdapter(
+            graphResponder: static fn (): mixed => 'OK',
+            globalResponder: static fn (): array => ['g1']
+        );
+        $db = FalkorDB::fromConnection($adapter);
+
+        self::assertSame(['g1'], $db->stubs());
+        $db->offload('g1');
+        $db->load('g1');
+        $db->load('g1', true);
+
+        self::assertSame('GRAPH.STUBS', $adapter->globalCalls[0]['command']);
+        self::assertSame([], $adapter->globalCalls[0]['arguments']);
+
+        self::assertSame('GRAPH.OFFLOAD', $adapter->graphCalls[0]['command']);
+        self::assertSame('g1', $adapter->graphCalls[0]['graph']);
+        self::assertSame([], $adapter->graphCalls[0]['arguments']);
+
+        self::assertSame('GRAPH.LOAD', $adapter->graphCalls[1]['command']);
+        self::assertSame([], $adapter->graphCalls[1]['arguments']);
+
+        self::assertSame('GRAPH.LOAD', $adapter->graphCalls[2]['command']);
+        self::assertSame(['FORCE'], $adapter->graphCalls[2]['arguments']);
+    }
 }

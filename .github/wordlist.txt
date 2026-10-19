@@ -15,3 +15,5 @@ config
 CHANGELOG
 README
 md
+APIs
+API
