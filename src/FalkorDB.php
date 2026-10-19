@@ -48,6 +48,49 @@ final class FalkorDB
         return $this->connection->listGraphs();
     }
 
+    /**
+     * List keys currently stored as enterprise graph offload stubs.
+     *
+     * Requires the FalkorDB Enterprise module (`GRAPH.STUBS`).
+     *
+     * @return array<int, string>
+     */
+    public function stubs(): array
+    {
+        $reply = $this->connection->executeGlobalCommand('GRAPH.STUBS');
+        if (!is_array($reply)) {
+            return [];
+        }
+
+        return array_values(array_map('strval', $reply));
+    }
+
+    /**
+     * Offload a graph by name (enterprise `GRAPH.OFFLOAD`).
+     */
+    public function offload(string $graphName): mixed
+    {
+        return $this->selectGraph($graphName)->offload();
+    }
+
+    /**
+     * Load an offloaded graph by name (enterprise `GRAPH.LOAD`).
+     */
+    public function load(string $graphName, bool $force = false): mixed
+    {
+        return $this->selectGraph($graphName)->load($force);
+    }
+
+    /**
+     * Return dump metadata for an offloaded graph stub (enterprise `GRAPH.STUBINFO`).
+     *
+     * @return array{path: string, size: int, mtime: int, atime: int, ctime: int}
+     */
+    public function stubInfo(string $graphName): array
+    {
+        return $this->selectGraph($graphName)->stubInfo();
+    }
+
     public function configGet(string $configKey): mixed
     {
         return $this->connection->executeGlobalCommand('GRAPH.CONFIG', ['GET', $configKey]);

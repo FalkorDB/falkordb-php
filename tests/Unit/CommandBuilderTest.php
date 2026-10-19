@@ -50,4 +50,27 @@ final class CommandBuilderTest extends TestCase
             CommandBuilder::udfListArguments('libA', true)
         );
     }
+
+    public function testBuildsLoadArgumentsAndParsesStubInfo(): void
+    {
+        self::assertSame([], CommandBuilder::loadArguments());
+        self::assertSame(['FORCE'], CommandBuilder::loadArguments(true));
+
+        self::assertSame(
+            [
+                'path' => '/var/lib/falkordb/offload/social.graph',
+                'size' => 42,
+                'mtime' => 1700000000,
+                'atime' => 1700000001,
+                'ctime' => 1700000002,
+            ],
+            CommandBuilder::parseStubInfoReply([
+                'path', '/var/lib/falkordb/offload/social.graph',
+                'size', '42',
+                'mtime', '1700000000',
+                'atime', '1700000001',
+                'ctime', '1700000002',
+            ])
+        );
+    }
 }

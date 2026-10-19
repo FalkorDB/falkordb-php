@@ -91,6 +91,57 @@ final class Graph
     }
 
     /**
+     * Serialize this graph to disk and replace it with an enterprise offload stub.
+     *
+     * Requires the FalkorDB Enterprise module (`GRAPH.OFFLOAD`).
+     * The operation is accepted asynchronously on the server; a successful reply
+     * means offloading was scheduled (or completed), not that concurrent readers
+     * can still query the live graph.
+     */
+    public function offload(): mixed
+    {
+        $reply = $this->connection->executeGraphCommand('GRAPH.OFFLOAD', $this->name);
+        $this->clearMetadataCache();
+
+        return $reply;
+    }
+
+    /**
+     * Reload an offloaded graph stub into memory.
+     *
+     * Requires the FalkorDB Enterprise module (`GRAPH.LOAD`).
+     * When `$force` is true, the server skips memory-headroom validation.
+     */
+    public function load(bool $force = false): mixed
+    {
+        $reply = $this->connection->executeGraphCommand(
+            'GRAPH.LOAD',
+            $this->name,
+            CommandBuilder::loadArguments($force)
+        );
+        $this->clearMetadataCache();
+
+        return $reply;
+    }
+
+    /**
+     * Return dump-file metadata for this graph if it is currently an offload stub.
+     *
+     * Requires the FalkorDB Enterprise module (`GRAPH.STUBINFO`).
+     *
+     * @return array{path: string, size: int, mtime: int, atime: int, ctime: int}
+     */
+    public function stubInfo(): array
+    {
+        $reply = $this->connection->executeGraphCommand('GRAPH.STUBINFO', $this->name);
+        if (!is_array($reply)) {
+            return CommandBuilder::parseStubInfoReply([]);
+        }
+
+        return CommandBuilder::parseStubInfoReply($reply);
+    }
+
+    /**
      * @return array<int, mixed>
      */
     public function memoryUsage(?int $samples = null): array

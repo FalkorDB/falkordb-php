@@ -166,4 +166,82 @@ final class GraphDispatchTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $graph->createTypedIndex('VECTOR', 'WEIRD', 'KNOWS', ['embedding']);
     }
+
+    public function testEnterpriseOffloadCommandsDispatchAndClearMetadata(): void
+    {
+        $adapter = new RecordingConnectionAdapter(
+            graphResponder: static function (string $command, string $graphName, array $arguments): mixed {
+                if ($command === 'GRAPH.STUBINFO') {
+                    return [
+                        'path', '/tmp/social.graph',
+                        'size', '99',
+                        'mtime', '1',
+                        'atime', '2',
+                        'ctime', '3',
+                    ];
+                }
+
+                if ($command === 'GRAPH.RO_QUERY') {
+                    $query = (string) ($arguments[0] ?? '');
+                    if (str_contains($query, 'CALL db.labels()')) {
+                        return [[[1, 'label']], [[[2, 'Person']]], ['Cached execution: 1']];
+                    }
+                    if (str_contains($query, 'CALL db.relationshipTypes()')) {
+                        return [[[1, 'relationship']], [[[2, 'KNOWS']]], ['Cached execution: 1']];
+                    }
+                    if (str_contains($query, 'CALL db.propertyKeys()')) {
+                        return [[[1, 'property']], [[[2, 'name']]], ['Cached execution: 1']];
+                    }
+                }
+
+                if ($command === 'GRAPH.QUERY') {
+                    return [
+                        [[8, 'n']],
+                        [[[8, [1, [0], [[0, 2, 'Alice']]]]]],
+                        ['Cached execution: 1'],
+                    ];
+                }
+
+                return 'OK';
+            }
+        );
+        $graph = new Graph($adapter, 'social');
+
+        // Warm metadata cache via node parsing.
+        $graph->query('MATCH (n) RETURN n');
+        $metadataBefore = count(array_filter(
+            $adapter->graphCalls,
+            static fn (array $call): bool => $call['command'] === 'GRAPH.RO_QUERY'
+                && str_starts_with((string) ($call['arguments'][0] ?? ''), 'CALL db.')
+        ));
+        self::assertSame(3, $metadataBefore);
+
+        self::assertSame('OK', $graph->offload());
+        self::assertSame('OK', $graph->load(true));
+        self::assertSame(
+            [
+                'path' => '/tmp/social.graph',
+                'size' => 99,
+                'mtime' => 1,
+                'atime' => 2,
+                'ctime' => 3,
+            ],
+            $graph->stubInfo()
+        );
+
+        self::assertSame('GRAPH.OFFLOAD', $adapter->graphCalls[4]['command']);
+        self::assertSame([], $adapter->graphCalls[4]['arguments']);
+        self::assertSame('GRAPH.LOAD', $adapter->graphCalls[5]['command']);
+        self::assertSame(['FORCE'], $adapter->graphCalls[5]['arguments']);
+        self::assertSame('GRAPH.STUBINFO', $adapter->graphCalls[6]['command']);
+
+        // Metadata should reload after offload/load cleared the cache.
+        $graph->query('MATCH (n) RETURN n');
+        $metadataAfter = count(array_filter(
+            $adapter->graphCalls,
+            static fn (array $call): bool => $call['command'] === 'GRAPH.RO_QUERY'
+                && str_starts_with((string) ($call['arguments'][0] ?? ''), 'CALL db.')
+        ));
+        self::assertSame(6, $metadataAfter);
+    }
 }

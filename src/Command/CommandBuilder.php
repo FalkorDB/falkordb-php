@@ -107,4 +107,48 @@ final class CommandBuilder
         }
         return $args;
     }
+
+    /**
+     * Build trailing arguments for GRAPH.LOAD (enterprise offloading).
+     *
+     * @return array<int, string>
+     */
+    public static function loadArguments(bool $force = false): array
+    {
+        return $force ? ['FORCE'] : [];
+    }
+
+    /**
+     * Parse GRAPH.STUBINFO flat field/value reply into an associative array.
+     *
+     * @param array<int, mixed> $reply
+     * @return array{path: string, size: int, mtime: int, atime: int, ctime: int}
+     */
+    public static function parseStubInfoReply(array $reply): array
+    {
+        $info = [
+            'path' => '',
+            'size' => 0,
+            'mtime' => 0,
+            'atime' => 0,
+            'ctime' => 0,
+        ];
+
+        $count = count($reply);
+        for ($i = 0; $i + 1 < $count; $i += 2) {
+            $field = strtolower((string) $reply[$i]);
+            $value = $reply[$i + 1];
+
+            if ($field === 'path') {
+                $info['path'] = (string) $value;
+                continue;
+            }
+
+            if (in_array($field, ['size', 'mtime', 'atime', 'ctime'], true)) {
+                $info[$field] = (int) $value;
+            }
+        }
+
+        return $info;
+    }
 }
