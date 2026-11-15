@@ -103,6 +103,10 @@ final class ClusterIntegrationTest extends TestCase
             $graphNames[] = "php_cluster_auto_it_{$i}_" . random_int(1000, 999999);
         }
 
+        // Cleanup failures are reported once the test body has passed; while an
+        // assertion failure is propagating they would only hide it.
+        $cleanupErrors = [];
+
         try {
             self::assertSame(ConnectionMode::CLUSTER, $db->mode());
 
@@ -114,11 +118,14 @@ final class ClusterIntegrationTest extends TestCase
             foreach ($graphNames as $graphName) {
                 try {
                     $db->selectGraph($graphName)->delete();
-                } catch (\Throwable) {
+                } catch (\Throwable $exception) {
+                    $cleanupErrors[] = "{$graphName}: {$exception->getMessage()}";
                 }
             }
             $db->close();
         }
+
+        self::assertSame([], $cleanupErrors, 'Failed to delete test graphs');
     }
 
     /**

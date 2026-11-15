@@ -94,6 +94,9 @@ final class SentinelIntegrationTest extends TestCase
         ]);
 
         $graph = $db->selectGraph('php_sentinel_auto_it_' . random_int(1000, 999999));
+        // A cleanup failure is reported once the test body has passed; while an
+        // assertion failure is propagating it would only hide it.
+        $cleanupError = null;
 
         try {
             self::assertSame(ConnectionMode::SENTINEL, $db->mode());
@@ -103,9 +106,12 @@ final class SentinelIntegrationTest extends TestCase
         } finally {
             try {
                 $graph->delete();
-            } catch (\Throwable) {
+            } catch (\Throwable $exception) {
+                $cleanupError = $exception->getMessage();
             }
             $db->close();
         }
+
+        self::assertNull($cleanupError, 'Failed to delete test graph');
     }
 }
