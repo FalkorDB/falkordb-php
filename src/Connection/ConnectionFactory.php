@@ -40,19 +40,14 @@ final class ConnectionFactory
         $redis = self::createRedis($options);
 
         try {
-            $info = $redis->info('server');
-            $redisMode = '';
+            $serverMode = ConnectionMode::fromServerInfo($redis->info('server'));
 
-            if (is_array($info) && isset($info['redis_mode'])) {
-                $redisMode = strtolower((string) $info['redis_mode']);
-            }
-
-            if ($redisMode === 'cluster') {
+            if ($serverMode === ConnectionMode::CLUSTER) {
                 $redis->close();
                 return new ClusterConnectionAdapter(self::createCluster($options));
             }
 
-            if ($redisMode === 'sentinel') {
+            if ($serverMode === ConnectionMode::SENTINEL) {
                 $redis->close();
                 return self::createSentinelAdapter($options);
             }

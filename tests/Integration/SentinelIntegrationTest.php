@@ -62,4 +62,56 @@ final class SentinelIntegrationTest extends TestCase
             $db->close();
         }
     }
+
+    /**
+     * Auto mode, given a Sentinel's address and no `masterName`, must notice it
+     * is talking to a Sentinel. Valkey reports this as `server_mode:sentinel` in
+     * `INFO server` (`redis_mode` only with `extended-redis-compatibility yes`);
+     * reading only `redis_mode` sent graph commands to the Sentinel itself.
+     * Auto-detected Sentinels use the default master name, `mymaster`.
+     */
+    public function testAutoModeDetectsSentinel(): void
+    {
+        if (!$this->shouldRunSentinelIntegration()) {
+            self::markTestSkipped('Set FALKORDB_RUN_INTEGRATION=1 and FALKORDB_RUN_SENTINEL_INTEGRATION=1');
+        }
+
+        if (!class_exists('RedisSentinel')) {
+            self::markTestSkipped('ext-redis RedisSentinel support is required for sentinel integration tests');
+        }
+
+        $db = FalkorDB::connect([
+            'host' => (string) (getenv('FALKORDB_SENTINEL_HOST') ?: '127.0.0.1'),
+            'port' => (int) (getenv('FALKORDB_SENTINEL_PORT') ?: '26379'),
+            'connectTimeout' => 2.5,
+            'readTimeout' => 2.5,
+            'redis' => [
+                'host' => (string) (getenv('FALKORDB_SENTINEL_REDIS_HOST') ?: '127.0.0.1'),
+                'port' => (int) (getenv('FALKORDB_SENTINEL_REDIS_PORT') ?: '6380'),
+                'connectTimeout' => 2.5,
+                'readTimeout' => 2.5,
+            ],
+        ]);
+
+        $graph = $db->selectGraph('php_sentinel_auto_it_' . random_int(1000, 999999));
+        // A cleanup failure is reported once the test body has passed; while an
+        // assertion failure is propagating it would only hide it.
+        $cleanupError = null;
+
+        try {
+            self::assertSame(ConnectionMode::SENTINEL, $db->mode());
+
+            $result = $graph->query("CREATE (n:Person {name:'Dave'}) RETURN n.name");
+            self::assertSame('Dave', array_values($result->data[0] ?? [])[0] ?? null);
+        } finally {
+            try {
+                $graph->delete();
+            } catch (\Throwable $exception) {
+                $cleanupError = $exception->getMessage();
+            }
+            $db->close();
+        }
+
+        self::assertNull($cleanupError, 'Failed to delete test graph');
+    }
 }
