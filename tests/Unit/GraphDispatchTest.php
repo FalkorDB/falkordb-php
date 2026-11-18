@@ -167,7 +167,7 @@ final class GraphDispatchTest extends TestCase
                 if ($command === 'GRAPH.QUERY') {
                     return [
                         [[8, 'r']],
-                        [[[8, [2, 0, 1, 2, []]]]],
+                        [[[7, [2, 0, 1, 2, []]]]],
                         ['Cached execution: 1'],
                     ];
                 }
@@ -278,7 +278,7 @@ final class GraphDispatchTest extends TestCase
             static fn (array $call): bool => $call['command'] === 'GRAPH.RO_QUERY'
                 && str_starts_with((string) ($call['arguments'][0] ?? ''), 'CALL db.')
         ));
-        self::assertSame(3, $metadataBefore);
+        self::assertSame(2, $metadataBefore);
 
         self::assertSame('OK', $graph->offload());
         self::assertSame('OK', $graph->load(true));
@@ -293,11 +293,11 @@ final class GraphDispatchTest extends TestCase
             $graph->stubInfo()
         );
 
-        self::assertSame('GRAPH.OFFLOAD', $adapter->graphCalls[4]['command']);
-        self::assertSame([], $adapter->graphCalls[4]['arguments']);
-        self::assertSame('GRAPH.LOAD', $adapter->graphCalls[5]['command']);
-        self::assertSame(['FORCE'], $adapter->graphCalls[5]['arguments']);
-        self::assertSame('GRAPH.STUBINFO', $adapter->graphCalls[6]['command']);
+        self::assertSame('GRAPH.OFFLOAD', $adapter->graphCalls[3]['command']);
+        self::assertSame([], $adapter->graphCalls[3]['arguments']);
+        self::assertSame('GRAPH.LOAD', $adapter->graphCalls[4]['command']);
+        self::assertSame(['FORCE'], $adapter->graphCalls[4]['arguments']);
+        self::assertSame('GRAPH.STUBINFO', $adapter->graphCalls[5]['command']);
 
         // Metadata should reload after offload/load cleared the cache.
         $graph->query('MATCH (n) RETURN n');
@@ -306,6 +306,6 @@ final class GraphDispatchTest extends TestCase
             static fn (array $call): bool => $call['command'] === 'GRAPH.RO_QUERY'
                 && str_starts_with((string) ($call['arguments'][0] ?? ''), 'CALL db.')
         ));
-        self::assertSame(6, $metadataAfter);
+        self::assertSame(4, $metadataAfter);
     }
 }
