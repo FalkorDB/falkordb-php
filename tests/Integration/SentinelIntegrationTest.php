@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FalkorDB\Tests\Integration;
 
 use FalkorDB\Connection\ConnectionMode;
+use FalkorDB\Exception\CommandException;
 use FalkorDB\FalkorDB;
 use FalkorDB\Tests\Integration\Support\IntegrationGuard;
 use PHPUnit\Framework\TestCase;
@@ -57,6 +58,41 @@ final class SentinelIntegrationTest extends TestCase
             if ($graphs !== []) {
                 self::assertContains($graphName, $graphs);
             }
+        } finally {
+            $graph->delete();
+            $db->close();
+        }
+    }
+
+    public function testQueryErrorsAreSurfacedViaSentinel(): void
+    {
+        if (!$this->shouldRunSentinelIntegration()) {
+            self::markTestSkipped('Set FALKORDB_RUN_INTEGRATION=1 and FALKORDB_RUN_SENTINEL_INTEGRATION=1');
+        }
+
+        if (!class_exists('RedisSentinel')) {
+            self::markTestSkipped('ext-redis RedisSentinel support is required for sentinel integration tests');
+        }
+
+        $db = FalkorDB::connect([
+            'mode' => 'sentinel',
+            'host' => (string) (getenv('FALKORDB_SENTINEL_HOST') ?: '127.0.0.1'),
+            'port' => (int) (getenv('FALKORDB_SENTINEL_PORT') ?: '26379'),
+            'masterName' => (string) (getenv('FALKORDB_SENTINEL_MASTER_NAME') ?: 'mymaster'),
+            'connectTimeout' => 2.5,
+            'readTimeout' => 2.5,
+            'redis' => [
+                'host' => (string) (getenv('FALKORDB_SENTINEL_REDIS_HOST') ?: '127.0.0.1'),
+                'port' => (int) (getenv('FALKORDB_SENTINEL_REDIS_PORT') ?: '6380'),
+                'connectTimeout' => 2.5,
+                'readTimeout' => 2.5,
+            ],
+        ]);
+        $graph = $db->selectGraph('php_sentinel_error_it_' . random_int(1000, 999999));
+
+        try {
+            $this->expectException(CommandException::class);
+            $graph->query('THIS IS NOT VALID CYPHER');
         } finally {
             $graph->delete();
             $db->close();

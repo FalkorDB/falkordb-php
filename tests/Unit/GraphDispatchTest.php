@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 namespace FalkorDB\Tests\Unit;
+use FalkorDB\Exception\CommandException;
 use FalkorDB\Exception\InvalidArgumentException;
 use FalkorDB\Graph\ConstraintType;
 use FalkorDB\Graph\EntityType;
@@ -35,6 +36,28 @@ final class GraphDispatchTest extends TestCase
 
         self::assertSame('GRAPH.RO_QUERY', $adapter->graphCalls[1]['command']);
         self::assertSame(['MATCH (n) RETURN n', 'TIMEOUT', '500', '--compact'], $adapter->graphCalls[1]['arguments']);
+    }
+
+    public function testQueryAndRoQueryRejectFalseReplies(): void
+    {
+        $adapter = new RecordingConnectionAdapter(
+            graphResponder: static fn (): false => false
+        );
+        $graph = new Graph($adapter, 'social');
+
+        try {
+            $graph->query('CREATE (:Person)');
+            self::fail('Expected query to reject a false server reply');
+        } catch (CommandException $exception) {
+            self::assertStringContainsString('got bool', $exception->getMessage());
+        }
+
+        try {
+            $graph->roQuery('MATCH (n) RETURN n');
+            self::fail('Expected read-only query to reject a false server reply');
+        } catch (CommandException $exception) {
+            self::assertStringContainsString('got bool', $exception->getMessage());
+        }
     }
 
     public function testMemoryAndConstraintCommandsHaveCorrectOrdering(): void

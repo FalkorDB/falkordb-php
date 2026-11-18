@@ -7,6 +7,7 @@ namespace FalkorDB\Graph;
 use DateTimeImmutable;
 use FalkorDB\Command\CommandBuilder;
 use FalkorDB\Connection\ConnectionAdapter;
+use FalkorDB\Exception\CommandException;
 use FalkorDB\Exception\InvalidArgumentException;
 use FalkorDB\Parser\QueryReplyParser;
 
@@ -361,13 +362,19 @@ final class Graph
 
     private function parseReply(mixed $reply): QueryResult
     {
+        if (!is_array($reply)) {
+            throw new CommandException(
+                'Failed to parse graph query reply: expected an array, got ' . get_debug_type($reply)
+            );
+        }
+
         $parser = new QueryReplyParser(
             fn (int $id): ?string => $this->resolveLabel($id),
             fn (int $id): ?string => $this->resolveRelationshipType($id),
             fn (int $id): ?string => $this->resolvePropertyKey($id),
         );
 
-        return $parser->parse(is_array($reply) ? $reply : []);
+        return $parser->parse($reply);
     }
 
     private function resolveLabel(int $id): ?string
