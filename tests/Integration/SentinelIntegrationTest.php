@@ -102,7 +102,9 @@ final class SentinelIntegrationTest extends TestCase
             }
         } finally {
             try {
-                $graph->delete();
+                if ($graph->delete() === false) {
+                    $cleanupErrors[] = 'delete: GRAPH.DELETE returned false';
+                }
             } catch (\Throwable $exception) {
                 $cleanupErrors[] = 'delete: ' . $exception->getMessage();
             }

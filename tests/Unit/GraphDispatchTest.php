@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FalkorDB\Tests\Unit;
 use FalkorDB\Exception\CommandException;
 use FalkorDB\Exception\InvalidArgumentException;
+use FalkorDB\Exception\MetadataException;
 use FalkorDB\Graph\ConstraintType;
 use FalkorDB\Graph\EntityType;
 
@@ -180,8 +181,8 @@ final class GraphDispatchTest extends TestCase
         try {
             $graph->query('MATCH ()-[r]->() RETURN r');
             self::fail('Expected the first relationship metadata lookup to fail');
-        } catch (CommandException $exception) {
-            self::assertStringContainsString('got bool', $exception->getMessage());
+        } catch (MetadataException $exception) {
+            self::assertStringContainsString('Graph query completed successfully', $exception->getMessage());
         }
 
         $result = $graph->query('MATCH ()-[r]->() RETURN r');
@@ -189,6 +190,58 @@ final class GraphDispatchTest extends TestCase
         self::assertInstanceOf(\FalkorDB\Value\EdgeValue::class, $result->data[0]['r']);
         self::assertSame('KNOWS', $result->data[0]['r']->relationshipType);
         self::assertSame(2, $relationshipLookups);
+    }
+
+    public function testFailedPropertyMetadataIsReportedSeparatelyAndRetried(): void
+    {
+        $propertyKeyLookups = 0;
+        $adapter = new RecordingConnectionAdapter(
+            graphResponder: static function (string $command, string $graphName, array $arguments) use (&$propertyKeyLookups): mixed {
+                if ($command === 'GRAPH.RO_QUERY' && str_contains((string) ($arguments[0] ?? ''), 'CALL db.labels()')) {
+                    return [
+                        [[1, 'label']],
+                        [[[2, 'Person']]],
+                        ['Cached execution: 1'],
+                    ];
+                }
+
+                if ($command === 'GRAPH.RO_QUERY' && str_contains((string) ($arguments[0] ?? ''), 'CALL db.propertyKeys()')) {
+                    $propertyKeyLookups++;
+                    if ($propertyKeyLookups === 1) {
+                        return false;
+                    }
+
+                    return [
+                        [[1, 'property']],
+                        [[[2, 'name']]],
+                        ['Cached execution: 1'],
+                    ];
+                }
+
+                if ($command === 'GRAPH.QUERY') {
+                    return [
+                        [[8, 'n']],
+                        [[[8, [1, [0], [[0, 2, 'Alice']]]]]],
+                        ['Cached execution: 1'],
+                    ];
+                }
+
+                return [['Cached execution: 1']];
+            }
+        );
+        $graph = new Graph($adapter, 'social');
+
+        try {
+            $graph->query('CREATE (n:Person {name: "Alice"}) RETURN n');
+            self::fail('Expected property metadata lookup to fail after the query succeeded');
+        } catch (MetadataException $exception) {
+            self::assertStringContainsString('Graph query completed successfully', $exception->getMessage());
+        }
+
+        $result = $graph->query('MATCH (n:Person) RETURN n');
+
+        self::assertSame('Alice', $result->data[0]['n']->properties['name']);
+        self::assertSame(2, $propertyKeyLookups);
     }
 
     public function testCreateTypedIndexUsesGeneratedCypher(): void

@@ -24,12 +24,12 @@ final class SentinelConnectionAdapter implements ConnectionAdapter
 
     public function executeGraphCommand(string $command, string $graphName, array $arguments = []): mixed
     {
-        $isQueryCommand = $command === 'GRAPH.QUERY' || $command === 'GRAPH.RO_QUERY';
+        $isQueryCommand = GraphQueryErrorHandler::isQueryCommand($command);
         $reply = $this->withReconnectRetry(
             function () use ($command, $graphName, $arguments, $isQueryCommand): mixed {
                 $master = $this->master();
-                if ($isQueryCommand && method_exists($master, 'clearLastError')) {
-                    $master->clearLastError();
+                if ($isQueryCommand) {
+                    GraphQueryErrorHandler::clearLastError($master);
                 }
 
                 return $master->rawCommand($command, $graphName, ...$arguments);
@@ -37,13 +37,14 @@ final class SentinelConnectionAdapter implements ConnectionAdapter
             $command
         );
 
-        if ($isQueryCommand && $reply === false && method_exists($this->master(), 'getLastError')) {
-            $lastError = $this->master()->getLastError();
-            if (is_string($lastError) && $lastError !== '') {
-                throw new CommandException(
-                    "Failed to execute {$command} via sentinel master {$this->masterName}: {$lastError}"
-                );
-            }
+        $queryError = GraphQueryErrorHandler::falseReplyException(
+            $this->master(),
+            $command,
+            "via sentinel master {$this->masterName}",
+            $reply
+        );
+        if ($queryError !== null) {
+            throw $queryError;
         }
 
         return $reply;

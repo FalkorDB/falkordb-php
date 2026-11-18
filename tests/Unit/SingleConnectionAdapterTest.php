@@ -86,7 +86,7 @@ final class SingleConnectionAdapterTest extends TestCase
         $adapter = new SingleConnectionAdapter($redis);
 
         try {
-            $adapter->executeGraphCommand('GRAPH.QUERY', 'social', ['THIS IS NOT VALID CYPHER']);
+            $adapter->executeGraphCommand('graph.ro_query', 'social', ['THIS IS NOT VALID CYPHER']);
             self::fail('Expected a false query reply to surface the Redis server error');
         } catch (CommandException $exception) {
             self::assertStringContainsString("Invalid input 'THIS'", $exception->getMessage());

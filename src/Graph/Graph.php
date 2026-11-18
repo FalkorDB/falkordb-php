@@ -9,6 +9,7 @@ use FalkorDB\Command\CommandBuilder;
 use FalkorDB\Connection\ConnectionAdapter;
 use FalkorDB\Exception\CommandException;
 use FalkorDB\Exception\InvalidArgumentException;
+use FalkorDB\Exception\MetadataException;
 use FalkorDB\Parser\QueryReplyParser;
 
 final class Graph
@@ -49,6 +50,8 @@ final class Graph
 
     /**
      * @param array<string, mixed>|int|null $options
+     * @throws CommandException If the server does not return a valid query reply.
+     * @throws MetadataException If the query succeeds but result metadata cannot be loaded.
      */
     public function query(string $query, array|int|null $options = null): QueryResult
     {
@@ -59,6 +62,8 @@ final class Graph
 
     /**
      * @param array<string, mixed>|int|null $options
+     * @throws CommandException If the server does not return a valid query reply.
+     * @throws MetadataException If the query succeeds but result metadata cannot be loaded.
      */
     public function roQuery(string $query, array|int|null $options = null): QueryResult
     {
@@ -408,7 +413,15 @@ final class Graph
         $this->metadataLoading = true;
 
         try {
-            $this->labels = $this->extractFirstColumn($this->roQuery('CALL db.labels()'));
+            try {
+                $this->labels = $this->extractFirstColumn($this->roQuery('CALL db.labels()'));
+            } catch (CommandException $exception) {
+                throw new MetadataException(
+                    'Graph query completed successfully, but label metadata could not be loaded: '
+                    . $exception->getMessage(),
+                    previous: $exception
+                );
+            }
             $this->labelsLoaded = true;
         } finally {
             $this->metadataLoading = false;
@@ -424,7 +437,15 @@ final class Graph
         $this->metadataLoading = true;
 
         try {
-            $this->relationshipTypes = $this->extractFirstColumn($this->roQuery('CALL db.relationshipTypes()'));
+            try {
+                $this->relationshipTypes = $this->extractFirstColumn($this->roQuery('CALL db.relationshipTypes()'));
+            } catch (CommandException $exception) {
+                throw new MetadataException(
+                    'Graph query completed successfully, but relationship-type metadata could not be loaded: '
+                    . $exception->getMessage(),
+                    previous: $exception
+                );
+            }
             $this->relationshipTypesLoaded = true;
         } finally {
             $this->metadataLoading = false;
@@ -440,7 +461,15 @@ final class Graph
         $this->metadataLoading = true;
 
         try {
-            $this->propertyKeys = $this->extractFirstColumn($this->roQuery('CALL db.propertyKeys()'));
+            try {
+                $this->propertyKeys = $this->extractFirstColumn($this->roQuery('CALL db.propertyKeys()'));
+            } catch (CommandException $exception) {
+                throw new MetadataException(
+                    'Graph query completed successfully, but property-key metadata could not be loaded: '
+                    . $exception->getMessage(),
+                    previous: $exception
+                );
+            }
             $this->propertyKeysLoaded = true;
         } finally {
             $this->metadataLoading = false;

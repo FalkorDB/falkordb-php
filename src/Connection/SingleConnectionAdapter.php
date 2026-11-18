@@ -16,11 +16,11 @@ final class SingleConnectionAdapter implements ConnectionAdapter
 
     public function executeGraphCommand(string $command, string $graphName, array $arguments = []): mixed
     {
-        $isQueryCommand = $command === 'GRAPH.QUERY' || $command === 'GRAPH.RO_QUERY';
+        $isQueryCommand = GraphQueryErrorHandler::isQueryCommand($command);
 
         try {
-            if ($isQueryCommand && method_exists($this->redis, 'clearLastError')) {
-                $this->redis->clearLastError();
+            if ($isQueryCommand) {
+                GraphQueryErrorHandler::clearLastError($this->redis);
             }
             $reply = $this->redis->rawCommand($command, $graphName, ...$arguments);
         } catch (Throwable $exception) {
@@ -30,11 +30,14 @@ final class SingleConnectionAdapter implements ConnectionAdapter
             );
         }
 
-        if ($isQueryCommand && $reply === false && method_exists($this->redis, 'getLastError')) {
-            $lastError = $this->redis->getLastError();
-            if (is_string($lastError) && $lastError !== '') {
-                throw new CommandException("Failed to execute {$command} on graph {$graphName}: {$lastError}");
-            }
+        $queryError = GraphQueryErrorHandler::falseReplyException(
+            $this->redis,
+            $command,
+            "on graph {$graphName}",
+            $reply
+        );
+        if ($queryError !== null) {
+            throw $queryError;
         }
 
         return $reply;

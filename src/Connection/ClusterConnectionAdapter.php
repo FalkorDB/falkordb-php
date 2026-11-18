@@ -19,11 +19,11 @@ final class ClusterConnectionAdapter implements ConnectionAdapter
 
     public function executeGraphCommand(string $command, string $graphName, array $arguments = []): mixed
     {
-        $isQueryCommand = $command === 'GRAPH.QUERY' || $command === 'GRAPH.RO_QUERY';
+        $isQueryCommand = GraphQueryErrorHandler::isQueryCommand($command);
 
         try {
-            if ($isQueryCommand && method_exists($this->cluster, 'clearLastError')) {
-                $this->cluster->clearLastError();
+            if ($isQueryCommand) {
+                GraphQueryErrorHandler::clearLastError($this->cluster);
             }
             $reply = $this->cluster->rawCommand($graphName, $command, $graphName, ...$arguments);
         } catch (Throwable $exception) {
@@ -33,11 +33,14 @@ final class ClusterConnectionAdapter implements ConnectionAdapter
             );
         }
 
-        if ($isQueryCommand && $reply === false && method_exists($this->cluster, 'getLastError')) {
-            $lastError = $this->cluster->getLastError();
-            if (is_string($lastError) && $lastError !== '') {
-                throw new CommandException("Failed to execute {$command} on cluster graph {$graphName}: {$lastError}");
-            }
+        $queryError = GraphQueryErrorHandler::falseReplyException(
+            $this->cluster,
+            $command,
+            "on cluster graph {$graphName}",
+            $reply
+        );
+        if ($queryError !== null) {
+            throw $queryError;
         }
 
         return $reply;
