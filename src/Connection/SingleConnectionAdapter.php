@@ -16,14 +16,31 @@ final class SingleConnectionAdapter implements ConnectionAdapter
 
     public function executeGraphCommand(string $command, string $graphName, array $arguments = []): mixed
     {
+        $isQueryCommand = GraphQueryErrorHandler::isQueryCommand($command);
+
         try {
-            return $this->redis->rawCommand($command, $graphName, ...$arguments);
+            if ($isQueryCommand) {
+                GraphQueryErrorHandler::clearLastError($this->redis);
+            }
+            $reply = $this->redis->rawCommand($command, $graphName, ...$arguments);
         } catch (Throwable $exception) {
             throw new CommandException(
                 "Failed to execute {$command} on graph {$graphName}: {$exception->getMessage()}",
                 previous: $exception
             );
         }
+
+        $queryError = GraphQueryErrorHandler::falseReplyException(
+            $this->redis,
+            $command,
+            "on graph {$graphName}",
+            $reply
+        );
+        if ($queryError !== null) {
+            throw $queryError;
+        }
+
+        return $reply;
     }
 
     public function executeGlobalCommand(string $command, array $arguments = [], ?string $routeKey = null): mixed

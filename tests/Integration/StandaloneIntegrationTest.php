@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FalkorDB\Tests\Integration;
 
+use FalkorDB\Exception\CommandException;
 use FalkorDB\FalkorDB;
 use FalkorDB\Tests\Integration\Support\IntegrationGuard;
 use PHPUnit\Framework\TestCase;
@@ -41,5 +42,56 @@ final class StandaloneIntegrationTest extends TestCase
             $graph->delete();
             $db->close();
         }
+    }
+
+    public function testQueryErrorsAreSurfacedAgainstStandaloneFalkorDB(): void
+    {
+        if (!$this->shouldRunBaseIntegration()) {
+            self::markTestSkipped('Set FALKORDB_RUN_INTEGRATION=1 to run integration tests');
+        }
+
+        if (!class_exists('Redis')) {
+            self::markTestSkipped('ext-redis is required for integration tests');
+        }
+
+        $host = (string) (getenv('FALKORDB_HOST') ?: '127.0.0.1');
+        $port = (int) (getenv('FALKORDB_PORT') ?: '6379');
+        $db = FalkorDB::connect([
+            'host' => $host,
+            'port' => $port,
+            'mode' => 'single',
+        ]);
+        $graph = $db->selectGraph('php_integration_error_' . random_int(1000, 999999));
+        $queryException = null;
+        $cleanupErrors = [];
+
+        try {
+            $graph->query('CREATE (:QueryErrorTest)');
+
+            try {
+                $graph->query('THIS IS NOT VALID CYPHER');
+            } catch (CommandException $exception) {
+                $queryException = $exception;
+            }
+        } finally {
+            try {
+                if ($graph->delete() === false) {
+                    $cleanupErrors[] = 'delete: GRAPH.DELETE returned false';
+                }
+            } catch (\Throwable $exception) {
+                $cleanupErrors[] = 'delete: ' . $exception->getMessage();
+            }
+            try {
+                $db->close();
+            } catch (\Throwable $exception) {
+                $cleanupErrors[] = 'close: ' . $exception->getMessage();
+            }
+        }
+
+        if ($queryException === null) {
+            self::fail('Expected invalid Cypher to be rejected by the standalone server');
+        }
+        self::assertStringContainsString('THIS', $queryException->getMessage());
+        self::assertSame([], $cleanupErrors, 'Failed to clean up standalone query error test');
     }
 }

@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 namespace FalkorDB\Tests\Unit;
+use FalkorDB\Exception\CommandException;
 use FalkorDB\Exception\InvalidArgumentException;
+use FalkorDB\Exception\MetadataException;
 use FalkorDB\Graph\ConstraintType;
 use FalkorDB\Graph\EntityType;
 
@@ -35,6 +37,28 @@ final class GraphDispatchTest extends TestCase
 
         self::assertSame('GRAPH.RO_QUERY', $adapter->graphCalls[1]['command']);
         self::assertSame(['MATCH (n) RETURN n', 'TIMEOUT', '500', '--compact'], $adapter->graphCalls[1]['arguments']);
+    }
+
+    public function testQueryAndRoQueryRejectFalseReplies(): void
+    {
+        $adapter = new RecordingConnectionAdapter(
+            graphResponder: static fn (): false => false
+        );
+        $graph = new Graph($adapter, 'social');
+
+        try {
+            $graph->query('CREATE (:Person)');
+            self::fail('Expected query to reject a false server reply');
+        } catch (CommandException $exception) {
+            self::assertStringContainsString('got bool', $exception->getMessage());
+        }
+
+        try {
+            $graph->roQuery('MATCH (n) RETURN n');
+            self::fail('Expected read-only query to reject a false server reply');
+        } catch (CommandException $exception) {
+            self::assertStringContainsString('got bool', $exception->getMessage());
+        }
     }
 
     public function testMemoryAndConstraintCommandsHaveCorrectOrdering(): void
@@ -70,7 +94,7 @@ final class GraphDispatchTest extends TestCase
     public function testMetadataIsLoadedOnceAndCached(): void
     {
         $adapter = new RecordingConnectionAdapter(
-            graphResponder: static function (string $command, string $graphName, array $arguments): array {
+            graphResponder: static function (string $command, string $graphName, array $arguments): mixed {
                 if ($command === 'GRAPH.RO_QUERY') {
                     $query = (string) ($arguments[0] ?? '');
 
@@ -83,11 +107,7 @@ final class GraphDispatchTest extends TestCase
                     }
 
                     if (str_contains($query, 'CALL db.relationshipTypes()')) {
-                        return [
-                            [[1, 'relationship']],
-                            [[[2, 'KNOWS']]],
-                            ['Cached execution: 1'],
-                        ];
+                        return false;
                     }
 
                     if (str_contains($query, 'CALL db.propertyKeys()')) {
@@ -124,7 +144,104 @@ final class GraphDispatchTest extends TestCase
                 && str_starts_with((string) ($call['arguments'][0] ?? ''), 'CALL db.')
         );
 
-        self::assertCount(3, $metadataQueries, 'Metadata should be loaded only once across repeated node parsing');
+        self::assertCount(2, $metadataQueries, 'Node parsing should load only labels and property keys');
+    }
+
+    public function testFailedRelationshipMetadataLookupIsRetried(): void
+    {
+        $relationshipLookups = 0;
+        $adapter = new RecordingConnectionAdapter(
+            graphResponder: static function (string $command, string $graphName, array $arguments) use (&$relationshipLookups): mixed {
+                if ($command === 'GRAPH.RO_QUERY' && str_contains((string) ($arguments[0] ?? ''), 'CALL db.relationshipTypes()')) {
+                    $relationshipLookups++;
+                    if ($relationshipLookups === 1) {
+                        return false;
+                    }
+
+                    return [
+                        [[1, 'relationship']],
+                        [[[2, 'KNOWS']]],
+                        ['Cached execution: 1'],
+                    ];
+                }
+
+                if ($command === 'GRAPH.QUERY') {
+                    return [
+                        [[8, 'r']],
+                        [[[7, [2, 0, 1, 2, []]]]],
+                        ['Cached execution: 1'],
+                    ];
+                }
+
+                return [['Cached execution: 1']];
+            }
+        );
+        $graph = new Graph($adapter, 'social');
+
+        try {
+            $graph->query('MATCH ()-[r]->() RETURN r');
+            self::fail('Expected the first relationship metadata lookup to fail');
+        } catch (MetadataException $exception) {
+            self::assertStringContainsString('Graph query completed successfully', $exception->getMessage());
+        }
+
+        $result = $graph->query('MATCH ()-[r]->() RETURN r');
+
+        self::assertInstanceOf(\FalkorDB\Value\EdgeValue::class, $result->data[0]['r']);
+        self::assertSame('KNOWS', $result->data[0]['r']->relationshipType);
+        self::assertSame(2, $relationshipLookups);
+    }
+
+    public function testFailedPropertyMetadataIsReportedSeparatelyAndRetried(): void
+    {
+        $propertyKeyLookups = 0;
+        $adapter = new RecordingConnectionAdapter(
+            graphResponder: static function (string $command, string $graphName, array $arguments) use (&$propertyKeyLookups): mixed {
+                if ($command === 'GRAPH.RO_QUERY' && str_contains((string) ($arguments[0] ?? ''), 'CALL db.labels()')) {
+                    return [
+                        [[1, 'label']],
+                        [[[2, 'Person']]],
+                        ['Cached execution: 1'],
+                    ];
+                }
+
+                if ($command === 'GRAPH.RO_QUERY' && str_contains((string) ($arguments[0] ?? ''), 'CALL db.propertyKeys()')) {
+                    $propertyKeyLookups++;
+                    if ($propertyKeyLookups === 1) {
+                        return false;
+                    }
+
+                    return [
+                        [[1, 'property']],
+                        [[[2, 'name']]],
+                        ['Cached execution: 1'],
+                    ];
+                }
+
+                if ($command === 'GRAPH.QUERY') {
+                    return [
+                        [[8, 'n']],
+                        [[[8, [1, [0], [[0, 2, 'Alice']]]]]],
+                        ['Cached execution: 1'],
+                    ];
+                }
+
+                return [['Cached execution: 1']];
+            }
+        );
+        $graph = new Graph($adapter, 'social');
+
+        try {
+            $graph->query('CREATE (n:Person {name: "Alice"}) RETURN n');
+            self::fail('Expected property metadata lookup to fail after the query succeeded');
+        } catch (MetadataException $exception) {
+            self::assertStringContainsString('Graph query completed successfully', $exception->getMessage());
+        }
+
+        $result = $graph->query('MATCH (n:Person) RETURN n');
+
+        self::assertSame('Alice', $result->data[0]['n']->properties['name']);
+        self::assertSame(2, $propertyKeyLookups);
     }
 
     public function testCreateTypedIndexUsesGeneratedCypher(): void
@@ -214,7 +331,7 @@ final class GraphDispatchTest extends TestCase
             static fn (array $call): bool => $call['command'] === 'GRAPH.RO_QUERY'
                 && str_starts_with((string) ($call['arguments'][0] ?? ''), 'CALL db.')
         ));
-        self::assertSame(3, $metadataBefore);
+        self::assertSame(2, $metadataBefore);
 
         self::assertSame('OK', $graph->offload());
         self::assertSame('OK', $graph->load(true));
@@ -229,11 +346,11 @@ final class GraphDispatchTest extends TestCase
             $graph->stubInfo()
         );
 
-        self::assertSame('GRAPH.OFFLOAD', $adapter->graphCalls[4]['command']);
-        self::assertSame([], $adapter->graphCalls[4]['arguments']);
-        self::assertSame('GRAPH.LOAD', $adapter->graphCalls[5]['command']);
-        self::assertSame(['FORCE'], $adapter->graphCalls[5]['arguments']);
-        self::assertSame('GRAPH.STUBINFO', $adapter->graphCalls[6]['command']);
+        self::assertSame('GRAPH.OFFLOAD', $adapter->graphCalls[3]['command']);
+        self::assertSame([], $adapter->graphCalls[3]['arguments']);
+        self::assertSame('GRAPH.LOAD', $adapter->graphCalls[4]['command']);
+        self::assertSame(['FORCE'], $adapter->graphCalls[4]['arguments']);
+        self::assertSame('GRAPH.STUBINFO', $adapter->graphCalls[5]['command']);
 
         // Metadata should reload after offload/load cleared the cache.
         $graph->query('MATCH (n) RETURN n');
@@ -242,6 +359,6 @@ final class GraphDispatchTest extends TestCase
             static fn (array $call): bool => $call['command'] === 'GRAPH.RO_QUERY'
                 && str_starts_with((string) ($call['arguments'][0] ?? ''), 'CALL db.')
         ));
-        self::assertSame(6, $metadataAfter);
+        self::assertSame(4, $metadataAfter);
     }
 }

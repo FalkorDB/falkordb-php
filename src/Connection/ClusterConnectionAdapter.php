@@ -19,14 +19,31 @@ final class ClusterConnectionAdapter implements ConnectionAdapter
 
     public function executeGraphCommand(string $command, string $graphName, array $arguments = []): mixed
     {
+        $isQueryCommand = GraphQueryErrorHandler::isQueryCommand($command);
+
         try {
-            return $this->cluster->rawCommand($graphName, $command, $graphName, ...$arguments);
+            if ($isQueryCommand) {
+                GraphQueryErrorHandler::clearLastError($this->cluster);
+            }
+            $reply = $this->cluster->rawCommand($graphName, $command, $graphName, ...$arguments);
         } catch (Throwable $exception) {
             throw new CommandException(
                 "Failed to execute {$command} on cluster graph {$graphName}: {$exception->getMessage()}",
                 previous: $exception
             );
         }
+
+        $queryError = GraphQueryErrorHandler::falseReplyException(
+            $this->cluster,
+            $command,
+            "on cluster graph {$graphName}",
+            $reply
+        );
+        if ($queryError !== null) {
+            throw $queryError;
+        }
+
+        return $reply;
     }
 
     public function executeGlobalCommand(string $command, array $arguments = [], ?string $routeKey = null): mixed
