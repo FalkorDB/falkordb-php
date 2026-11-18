@@ -24,10 +24,29 @@ final class SentinelConnectionAdapter implements ConnectionAdapter
 
     public function executeGraphCommand(string $command, string $graphName, array $arguments = []): mixed
     {
-        return $this->withReconnectRetry(
-            fn () => $this->master()->rawCommand($command, $graphName, ...$arguments),
+        $isQueryCommand = $command === 'GRAPH.QUERY' || $command === 'GRAPH.RO_QUERY';
+        $reply = $this->withReconnectRetry(
+            function () use ($command, $graphName, $arguments, $isQueryCommand): mixed {
+                $master = $this->master();
+                if ($isQueryCommand && method_exists($master, 'clearLastError')) {
+                    $master->clearLastError();
+                }
+
+                return $master->rawCommand($command, $graphName, ...$arguments);
+            },
             $command
         );
+
+        if ($isQueryCommand && $reply === false && method_exists($this->master(), 'getLastError')) {
+            $lastError = $this->master()->getLastError();
+            if (is_string($lastError) && $lastError !== '') {
+                throw new CommandException(
+                    "Failed to execute {$command} via sentinel master {$this->masterName}: {$lastError}"
+                );
+            }
+        }
+
+        return $reply;
     }
 
     public function executeGlobalCommand(string $command, array $arguments = [], ?string $routeKey = null): mixed

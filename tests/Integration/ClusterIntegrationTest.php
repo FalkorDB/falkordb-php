@@ -87,14 +87,35 @@ final class ClusterIntegrationTest extends TestCase
             'readTimeout' => 2.5,
         ]);
         $graph = $db->selectGraph('{php_cluster_error_it_' . random_int(1000, 999999) . '}');
+        $queryException = null;
+        $cleanupErrors = [];
 
         try {
-            $this->expectException(\FalkorDB\Exception\CommandException::class);
-            $graph->query('THIS IS NOT VALID CYPHER');
+            $graph->query('CREATE (:QueryErrorTest)');
+
+            try {
+                $graph->query('THIS IS NOT VALID CYPHER');
+            } catch (\FalkorDB\Exception\CommandException $exception) {
+                $queryException = $exception;
+            }
         } finally {
-            $graph->delete();
-            $db->close();
+            try {
+                $graph->delete();
+            } catch (\Throwable $exception) {
+                $cleanupErrors[] = 'delete: ' . $exception->getMessage();
+            }
+            try {
+                $db->close();
+            } catch (\Throwable $exception) {
+                $cleanupErrors[] = 'close: ' . $exception->getMessage();
+            }
         }
+
+        if ($queryException === null) {
+            self::fail('Expected invalid Cypher to be rejected by the cluster server');
+        }
+        self::assertStringContainsString('THIS', $queryException->getMessage());
+        self::assertSame([], $cleanupErrors, 'Failed to clean up cluster query error test');
     }
 
     /**

@@ -93,7 +93,7 @@ final class GraphDispatchTest extends TestCase
     public function testMetadataIsLoadedOnceAndCached(): void
     {
         $adapter = new RecordingConnectionAdapter(
-            graphResponder: static function (string $command, string $graphName, array $arguments): array {
+            graphResponder: static function (string $command, string $graphName, array $arguments): mixed {
                 if ($command === 'GRAPH.RO_QUERY') {
                     $query = (string) ($arguments[0] ?? '');
 
@@ -106,11 +106,7 @@ final class GraphDispatchTest extends TestCase
                     }
 
                     if (str_contains($query, 'CALL db.relationshipTypes()')) {
-                        return [
-                            [[1, 'relationship']],
-                            [[[2, 'KNOWS']]],
-                            ['Cached execution: 1'],
-                        ];
+                        return false;
                     }
 
                     if (str_contains($query, 'CALL db.propertyKeys()')) {
@@ -147,7 +143,52 @@ final class GraphDispatchTest extends TestCase
                 && str_starts_with((string) ($call['arguments'][0] ?? ''), 'CALL db.')
         );
 
-        self::assertCount(3, $metadataQueries, 'Metadata should be loaded only once across repeated node parsing');
+        self::assertCount(2, $metadataQueries, 'Node parsing should load only labels and property keys');
+    }
+
+    public function testFailedRelationshipMetadataLookupIsRetried(): void
+    {
+        $relationshipLookups = 0;
+        $adapter = new RecordingConnectionAdapter(
+            graphResponder: static function (string $command, string $graphName, array $arguments) use (&$relationshipLookups): mixed {
+                if ($command === 'GRAPH.RO_QUERY' && str_contains((string) ($arguments[0] ?? ''), 'CALL db.relationshipTypes()')) {
+                    $relationshipLookups++;
+                    if ($relationshipLookups === 1) {
+                        return false;
+                    }
+
+                    return [
+                        [[1, 'relationship']],
+                        [[[2, 'KNOWS']]],
+                        ['Cached execution: 1'],
+                    ];
+                }
+
+                if ($command === 'GRAPH.QUERY') {
+                    return [
+                        [[8, 'r']],
+                        [[[8, [2, 0, 1, 2, []]]]],
+                        ['Cached execution: 1'],
+                    ];
+                }
+
+                return [['Cached execution: 1']];
+            }
+        );
+        $graph = new Graph($adapter, 'social');
+
+        try {
+            $graph->query('MATCH ()-[r]->() RETURN r');
+            self::fail('Expected the first relationship metadata lookup to fail');
+        } catch (CommandException $exception) {
+            self::assertStringContainsString('got bool', $exception->getMessage());
+        }
+
+        $result = $graph->query('MATCH ()-[r]->() RETURN r');
+
+        self::assertInstanceOf(\FalkorDB\Value\EdgeValue::class, $result->data[0]['r']);
+        self::assertSame('KNOWS', $result->data[0]['r']->relationshipType);
+        self::assertSame(2, $relationshipLookups);
     }
 
     public function testCreateTypedIndexUsesGeneratedCypher(): void

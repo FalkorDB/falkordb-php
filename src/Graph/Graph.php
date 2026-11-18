@@ -20,7 +20,9 @@ final class Graph
     /** @var array<int, string> */
     private array $propertyKeys = [];
 
-    private bool $metadataLoaded = false;
+    private bool $labelsLoaded = false;
+    private bool $relationshipTypesLoaded = false;
+    private bool $propertyKeysLoaded = false;
     private bool $metadataLoading = false;
 
     public function __construct(
@@ -39,7 +41,9 @@ final class Graph
         $this->labels = [];
         $this->relationshipTypes = [];
         $this->propertyKeys = [];
-        $this->metadataLoaded = false;
+        $this->labelsLoaded = false;
+        $this->relationshipTypesLoaded = false;
+        $this->propertyKeysLoaded = false;
         $this->metadataLoading = false;
     }
 
@@ -379,39 +383,65 @@ final class Graph
 
     private function resolveLabel(int $id): ?string
     {
-        $this->ensureMetadataLoaded();
+        $this->ensureLabelsLoaded();
         return $this->labels[$id] ?? null;
     }
 
     private function resolveRelationshipType(int $id): ?string
     {
-        $this->ensureMetadataLoaded();
+        $this->ensureRelationshipTypesLoaded();
         return $this->relationshipTypes[$id] ?? null;
     }
 
     private function resolvePropertyKey(int $id): ?string
     {
-        $this->ensureMetadataLoaded();
+        $this->ensurePropertyKeysLoaded();
         return $this->propertyKeys[$id] ?? null;
     }
 
-    private function ensureMetadataLoaded(): void
+    private function ensureLabelsLoaded(): void
     {
-        if ($this->metadataLoaded || $this->metadataLoading) {
+        if ($this->labelsLoaded || $this->metadataLoading) {
             return;
         }
 
         $this->metadataLoading = true;
 
         try {
-            $labelsResult = $this->roQuery('CALL db.labels()');
-            $relationshipsResult = $this->roQuery('CALL db.relationshipTypes()');
-            $propertyKeysResult = $this->roQuery('CALL db.propertyKeys()');
+            $this->labels = $this->extractFirstColumn($this->roQuery('CALL db.labels()'));
+            $this->labelsLoaded = true;
+        } finally {
+            $this->metadataLoading = false;
+        }
+    }
 
-            $this->labels = $this->extractFirstColumn($labelsResult);
-            $this->relationshipTypes = $this->extractFirstColumn($relationshipsResult);
-            $this->propertyKeys = $this->extractFirstColumn($propertyKeysResult);
-            $this->metadataLoaded = true;
+    private function ensureRelationshipTypesLoaded(): void
+    {
+        if ($this->relationshipTypesLoaded || $this->metadataLoading) {
+            return;
+        }
+
+        $this->metadataLoading = true;
+
+        try {
+            $this->relationshipTypes = $this->extractFirstColumn($this->roQuery('CALL db.relationshipTypes()'));
+            $this->relationshipTypesLoaded = true;
+        } finally {
+            $this->metadataLoading = false;
+        }
+    }
+
+    private function ensurePropertyKeysLoaded(): void
+    {
+        if ($this->propertyKeysLoaded || $this->metadataLoading) {
+            return;
+        }
+
+        $this->metadataLoading = true;
+
+        try {
+            $this->propertyKeys = $this->extractFirstColumn($this->roQuery('CALL db.propertyKeys()'));
+            $this->propertyKeysLoaded = true;
         } finally {
             $this->metadataLoading = false;
         }

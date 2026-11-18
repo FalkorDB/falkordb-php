@@ -62,13 +62,34 @@ final class StandaloneIntegrationTest extends TestCase
             'mode' => 'single',
         ]);
         $graph = $db->selectGraph('php_integration_error_' . random_int(1000, 999999));
+        $queryException = null;
+        $cleanupErrors = [];
 
         try {
-            $this->expectException(CommandException::class);
-            $graph->query('THIS IS NOT VALID CYPHER');
+            $graph->query('CREATE (:QueryErrorTest)');
+
+            try {
+                $graph->query('THIS IS NOT VALID CYPHER');
+            } catch (CommandException $exception) {
+                $queryException = $exception;
+            }
         } finally {
-            $graph->delete();
-            $db->close();
+            try {
+                $graph->delete();
+            } catch (\Throwable $exception) {
+                $cleanupErrors[] = 'delete: ' . $exception->getMessage();
+            }
+            try {
+                $db->close();
+            } catch (\Throwable $exception) {
+                $cleanupErrors[] = 'close: ' . $exception->getMessage();
+            }
         }
+
+        if ($queryException === null) {
+            self::fail('Expected invalid Cypher to be rejected by the standalone server');
+        }
+        self::assertStringContainsString('THIS', $queryException->getMessage());
+        self::assertSame([], $cleanupErrors, 'Failed to clean up standalone query error test');
     }
 }
