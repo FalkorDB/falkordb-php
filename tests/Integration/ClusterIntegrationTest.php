@@ -65,6 +65,61 @@ final class ClusterIntegrationTest extends TestCase
         }
     }
 
+    public function testQueryErrorsAreSurfacedAgainstCluster(): void
+    {
+        if (!$this->shouldRunClusterIntegration()) {
+            self::markTestSkipped('Set FALKORDB_RUN_INTEGRATION=1 and FALKORDB_RUN_CLUSTER_INTEGRATION=1');
+        }
+
+        if (!class_exists('RedisCluster')) {
+            self::markTestSkipped('ext-redis RedisCluster support is required for cluster integration tests');
+        }
+
+        $seeds = getenv('FALKORDB_CLUSTER_SEEDS');
+        $seedList = is_string($seeds) && $seeds !== ''
+            ? array_values(array_filter(array_map('trim', explode(',', $seeds))))
+            : ['127.0.0.1:17000', '127.0.0.1:17001', '127.0.0.1:17002'];
+        $this->waitForClusterReady($seedList[0]);
+        $db = $this->connectClusterWithRetry([
+            'mode' => 'cluster',
+            'seeds' => $seedList,
+            'connectTimeout' => 2.5,
+            'readTimeout' => 2.5,
+        ]);
+        $graph = $db->selectGraph('{php_cluster_error_it_' . random_int(1000, 999999) . '}');
+        $queryException = null;
+        $cleanupErrors = [];
+
+        try {
+            $graph->query('CREATE (:QueryErrorTest)');
+
+            try {
+                $graph->query('THIS IS NOT VALID CYPHER');
+            } catch (\FalkorDB\Exception\CommandException $exception) {
+                $queryException = $exception;
+            }
+        } finally {
+            try {
+                if ($graph->delete() === false) {
+                    $cleanupErrors[] = 'delete: GRAPH.DELETE returned false';
+                }
+            } catch (\Throwable $exception) {
+                $cleanupErrors[] = 'delete: ' . $exception->getMessage();
+            }
+            try {
+                $db->close();
+            } catch (\Throwable $exception) {
+                $cleanupErrors[] = 'close: ' . $exception->getMessage();
+            }
+        }
+
+        if ($queryException === null) {
+            self::fail('Expected invalid Cypher to be rejected by the cluster server');
+        }
+        self::assertStringContainsString('THIS', $queryException->getMessage());
+        self::assertSame([], $cleanupErrors, 'Failed to clean up cluster query error test');
+    }
+
     /**
      * Auto mode, given one node's address, must notice the node is part of a
      * cluster. Valkey reports this as `server_mode:cluster` in `INFO server`

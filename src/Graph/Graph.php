@@ -7,7 +7,9 @@ namespace FalkorDB\Graph;
 use DateTimeImmutable;
 use FalkorDB\Command\CommandBuilder;
 use FalkorDB\Connection\ConnectionAdapter;
+use FalkorDB\Exception\CommandException;
 use FalkorDB\Exception\InvalidArgumentException;
+use FalkorDB\Exception\MetadataException;
 use FalkorDB\Parser\QueryReplyParser;
 
 final class Graph
@@ -19,7 +21,9 @@ final class Graph
     /** @var array<int, string> */
     private array $propertyKeys = [];
 
-    private bool $metadataLoaded = false;
+    private bool $labelsLoaded = false;
+    private bool $relationshipTypesLoaded = false;
+    private bool $propertyKeysLoaded = false;
     private bool $metadataLoading = false;
 
     public function __construct(
@@ -38,12 +42,16 @@ final class Graph
         $this->labels = [];
         $this->relationshipTypes = [];
         $this->propertyKeys = [];
-        $this->metadataLoaded = false;
+        $this->labelsLoaded = false;
+        $this->relationshipTypesLoaded = false;
+        $this->propertyKeysLoaded = false;
         $this->metadataLoading = false;
     }
 
     /**
      * @param array<string, mixed>|int|null $options
+     * @throws CommandException If the server does not return a valid query reply.
+     * @throws MetadataException If the query succeeds but result metadata cannot be loaded.
      */
     public function query(string $query, array|int|null $options = null): QueryResult
     {
@@ -54,6 +62,8 @@ final class Graph
 
     /**
      * @param array<string, mixed>|int|null $options
+     * @throws CommandException If the server does not return a valid query reply.
+     * @throws MetadataException If the query succeeds but result metadata cannot be loaded.
      */
     public function roQuery(string $query, array|int|null $options = null): QueryResult
     {
@@ -361,50 +371,106 @@ final class Graph
 
     private function parseReply(mixed $reply): QueryResult
     {
+        if (!is_array($reply)) {
+            throw new CommandException(
+                'Failed to parse graph query reply: expected an array, got ' . get_debug_type($reply)
+            );
+        }
+
         $parser = new QueryReplyParser(
             fn (int $id): ?string => $this->resolveLabel($id),
             fn (int $id): ?string => $this->resolveRelationshipType($id),
             fn (int $id): ?string => $this->resolvePropertyKey($id),
         );
 
-        return $parser->parse(is_array($reply) ? $reply : []);
+        return $parser->parse($reply);
     }
 
     private function resolveLabel(int $id): ?string
     {
-        $this->ensureMetadataLoaded();
+        $this->ensureLabelsLoaded();
         return $this->labels[$id] ?? null;
     }
 
     private function resolveRelationshipType(int $id): ?string
     {
-        $this->ensureMetadataLoaded();
+        $this->ensureRelationshipTypesLoaded();
         return $this->relationshipTypes[$id] ?? null;
     }
 
     private function resolvePropertyKey(int $id): ?string
     {
-        $this->ensureMetadataLoaded();
+        $this->ensurePropertyKeysLoaded();
         return $this->propertyKeys[$id] ?? null;
     }
 
-    private function ensureMetadataLoaded(): void
+    private function ensureLabelsLoaded(): void
     {
-        if ($this->metadataLoaded || $this->metadataLoading) {
+        if ($this->labelsLoaded || $this->metadataLoading) {
             return;
         }
 
         $this->metadataLoading = true;
 
         try {
-            $labelsResult = $this->roQuery('CALL db.labels()');
-            $relationshipsResult = $this->roQuery('CALL db.relationshipTypes()');
-            $propertyKeysResult = $this->roQuery('CALL db.propertyKeys()');
+            try {
+                $this->labels = $this->extractFirstColumn($this->roQuery('CALL db.labels()'));
+            } catch (CommandException $exception) {
+                throw new MetadataException(
+                    'Graph query completed successfully, but label metadata could not be loaded: '
+                    . $exception->getMessage(),
+                    previous: $exception
+                );
+            }
+            $this->labelsLoaded = true;
+        } finally {
+            $this->metadataLoading = false;
+        }
+    }
 
-            $this->labels = $this->extractFirstColumn($labelsResult);
-            $this->relationshipTypes = $this->extractFirstColumn($relationshipsResult);
-            $this->propertyKeys = $this->extractFirstColumn($propertyKeysResult);
-            $this->metadataLoaded = true;
+    private function ensureRelationshipTypesLoaded(): void
+    {
+        if ($this->relationshipTypesLoaded || $this->metadataLoading) {
+            return;
+        }
+
+        $this->metadataLoading = true;
+
+        try {
+            try {
+                $this->relationshipTypes = $this->extractFirstColumn($this->roQuery('CALL db.relationshipTypes()'));
+            } catch (CommandException $exception) {
+                throw new MetadataException(
+                    'Graph query completed successfully, but relationship-type metadata could not be loaded: '
+                    . $exception->getMessage(),
+                    previous: $exception
+                );
+            }
+            $this->relationshipTypesLoaded = true;
+        } finally {
+            $this->metadataLoading = false;
+        }
+    }
+
+    private function ensurePropertyKeysLoaded(): void
+    {
+        if ($this->propertyKeysLoaded || $this->metadataLoading) {
+            return;
+        }
+
+        $this->metadataLoading = true;
+
+        try {
+            try {
+                $this->propertyKeys = $this->extractFirstColumn($this->roQuery('CALL db.propertyKeys()'));
+            } catch (CommandException $exception) {
+                throw new MetadataException(
+                    'Graph query completed successfully, but property-key metadata could not be loaded: '
+                    . $exception->getMessage(),
+                    previous: $exception
+                );
+            }
+            $this->propertyKeysLoaded = true;
         } finally {
             $this->metadataLoading = false;
         }
